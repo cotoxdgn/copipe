@@ -172,6 +172,9 @@
 
   function pasteAndSave() {
     if (state.busy) return;
+    // 入力欄に文字があるときは、その内容を保存する（クリップボードは読まない）
+    var typed = $('manualInput').value;
+    if (typed.trim()) { saveManual(); return; }
     if (!navigator.clipboard || !navigator.clipboard.readText) {
       toast('この環境では読み取れません。手入力欄に貼り付けてください', true);
       $('manualInput').focus();
@@ -180,6 +183,23 @@
     navigator.clipboard.readText().then(saveText, function () {
       toast(isIOS() ? '貼り付けが取り消されました' : 'クリップボードの許可が必要です', true);
     });
+  }
+
+  function saveManual() {
+    if (state.busy) return;
+    var mi = $('manualInput');
+    var v = mi.value;
+    if (!v.trim()) { toast('入力欄が空です', true); return; }
+    saveText(v).then(function (ok) {
+      if (ok) { mi.value = ''; mi.style.height = ''; updatePasteLabel(); }
+    });
+  }
+
+  // 入力欄に文字があるときは大きいボタンを「入力した内容を保存」に切り替える
+  function updatePasteLabel() {
+    var typed = !!$('manualInput').value.trim();
+    $('pasteLabel').textContent = typed ? '入力した内容を保存' : '貼り付けて保存';
+    $('pasteBtn').classList.toggle('typed', typed);
   }
 
   function copyText(text) {
@@ -294,11 +314,10 @@
       mi.style.height = 'auto';
       mi.style.height = Math.min(mi.scrollHeight, 160) + 'px';
     });
+    mi.addEventListener('input', updatePasteLabel);
     $('manualForm').addEventListener('submit', function (ev) {
       ev.preventDefault();
-      var v = mi.value;
-      if (!v.trim()) { toast('入力欄が空です', true); return; }
-      saveText(v).then(function (ok) { if (ok) { mi.value = ''; mi.style.height = ''; } });
+      saveManual();
     });
     mi.addEventListener('keydown', function (ev) {
       if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); $('manualForm').requestSubmit(); }
