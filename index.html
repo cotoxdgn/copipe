@@ -61,7 +61,7 @@
   <form class="setup" id="setupForm">
     <div>
       <h1 id="setupTitle">はじめての設定</h1>
-      <p class="lead" id="setupLead">設定済みの端末（Windowsなど）の 歯車 →「他の端末を追加」に出るQRを読み取るだけで設定できます。</p>
+      <p class="lead" id="setupLead"></p>
     </div>
     <div class="status" id="setupStatus" hidden></div>
 
@@ -73,7 +73,7 @@
       <button type="button" class="outline-btn" id="showQrBtn">QRを表示</button>
       <div class="qr-wrap" id="qrWrap" hidden>
         <img id="qrImg" alt="設定用QRコード" width="240" height="240">
-        <p class="warn">このQRには合言葉が入っています。スクショ・共有はしないでください。</p>
+        <p class="warn">このQRには接続のための鍵が入っています。スクショ・共有はしないでください。</p>
         <button type="button" class="text-btn" id="hideQrBtn">QRを隠す</button>
       </div>
     </div>
@@ -90,16 +90,13 @@
       <summary id="manualSummary">手で入力する</summary>
       <div class="fields">
         <label>
-          <span class="f-label">スプシの接続URL</span>
-          <input type="url" id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
-          <span class="f-help">1台目は、スプシの準備で「デプロイ」したときに出た …/exec で終わるURL</span>
-        </label>
-        <label>
-          <span class="f-label">合言葉</span>
-          <input type="password" id="cfgKey" autocomplete="off">
-          <span class="f-help">スプシの「設定」シートB1に入れた合言葉</span>
+          <span class="f-label">設定リンク</span>
+          <input type="text" id="cfgLink" placeholder="https://…/copipe/#setup=…" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <span class="f-help">スプシのメニュー「コピペ」→「この端末を設定」のボタンを右クリック →「リンクのアドレスをコピー」して貼り付け</span>
         </label>
       </div>
+      <input type="hidden" id="cfgUrl">
+      <input type="hidden" id="cfgKey">
     </details>
 
     <div class="card fields">

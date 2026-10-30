@@ -1,12 +1,13 @@
 /**
  * 端末間コピペ（copipe） スプレッドシート側のプログラム
  * 使い方は SETUP.md を参照。
- * 1) このコードを貼り付けて保存 → 関数「setup」を1回実行
- * 2) 「設定」シートの B1 に合言葉を入れる
- * 3) デプロイ → 新しいデプロイ → 種類「ウェブアプリ」
+ * 1) このコードを貼り付けて保存 → 関数「setup」を1回実行（合言葉は自動で作られます）
+ * 2) デプロイ → 新しいデプロイ → 種類「ウェブアプリ」
  *    実行ユーザー：自分 ／ アクセスできるユーザー：全員
+ * 3) スプシを開き直し、メニュー「コピペ」→「この端末を設定」
  */
 
+var APP_URL = 'https://cotoxdgn.github.io/copipe/';
 var ITEMS_SHEET = 'items';
 var CONF_SHEET = '設定';
 var MAX_ITEMS = 20;      // ピン留め以外で残す件数
@@ -19,15 +20,85 @@ function setup() {
   sh.getRange(1, 1, 1, HEADER.length).setValues([HEADER]).setFontWeight('bold');
   sh.getRange('A:F').setNumberFormat('@');
   sh.setFrozenRows(1);
-  var conf = ss.getSheetByName(CONF_SHEET) || ss.insertSheet(CONF_SHEET);
-  conf.getRange('A1').setValue('合言葉').setFontWeight('bold');
-  conf.getRange('B1').setNumberFormat('@');
-  conf.getRange('A3').setValue('B1に合言葉を入れてください。アプリの初回設定で同じものを入力します。');
+  conf_();
   var def = ss.getSheetByName('シート1') || ss.getSheetByName('Sheet1');
   if (def && ss.getSheets().length > 2 && def.getLastRow() === 0) ss.deleteSheet(def);
 }
 
+// 「設定」シートを整え、合言葉が空なら自動で作る
+function conf_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var conf = ss.getSheetByName(CONF_SHEET) || ss.insertSheet(CONF_SHEET);
+  conf.getRange('A1').setValue('合言葉（自動）').setFontWeight('bold');
+  conf.getRange('A2').setValue('接続URL（自動）').setFontWeight('bold');
+  conf.getRange('B1:B2').setNumberFormat('@');
+  conf.getRange('A3').clearContent();
+  conf.getRange('A4').setValue('入力は不要です。端末の設定は、メニュー「コピペ」→「この端末を設定」から行います。B1・B2は人に見せないでください。');
+  var key = String(conf.getRange('B1').getValue()).trim();
+  if (!key) {
+    key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    conf.getRange('B1').setValue(key);
+  }
+  return conf;
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('コピペ')
+    .addItem('この端末を設定（リンクとQR）', 'showSetup')
+    .addToUi();
+}
+
+// 公開URL（…/exec）を探す：自動で取れなければ B2 の値を使う
+function execUrl_(conf) {
+  var u = '';
+  try { u = ScriptApp.getService().getUrl() || ''; } catch (e) { u = ''; }
+  if (/\/exec$/.test(u)) {
+    conf.getRange('B2').setValue(u);
+    return u;
+  }
+  var saved = String(conf.getRange('B2').getValue()).trim();
+  return /\/exec$/.test(saved) ? saved : '';
+}
+
+function showSetup() {
+  var conf = conf_();
+  var url = execUrl_(conf);
+  var key = String(conf.getRange('B1').getValue()).trim();
+  var t = HtmlService.createTemplate(SETUP_HTML);
+  t.url = url;
+  t.link = url ? APP_URL + '#setup=' + b64url_(JSON.stringify({ u: url, k: key })) : '';
+  t.qrLib = APP_URL + 'lib/qrcode.js';
+  SpreadsheetApp.getUi().showModalDialog(t.evaluate().setWidth(420).setHeight(560), '端末間コピペ：この端末を設定');
+}
+
+function b64url_(str) {
+  return Utilities.base64EncodeWebSafe(Utilities.newBlob(str).getBytes()).replace(/=+$/, '');
+}
+
+var SETUP_HTML = [
+  '<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#1F2328">',
+  '<? if (!url) { ?>',
+  '<p style="color:#9B2C1C;font-weight:bold">公開URLが見つかりませんでした。</p>',
+  '<p>「デプロイ」→「デプロイを管理」で、ウェブアプリのURL（…/exec で終わるもの）をコピーし、「設定」シートの <b>B2</b> に貼り付けてから、もう一度このメニューを開いてください。</p>',
+  '<? } else { ?>',
+  '<p><b>このパソコン</b>：下のボタンを押すと、アプリが開いて設定が終わります。</p>',
+  '<p><a href="<?= link ?>" target="_blank" rel="noopener" style="display:block;text-align:center;background:#0F6E6E;color:#fff;padding:12px;border-radius:12px;text-decoration:none;font-weight:bold">アプリを開いて設定する</a></p>',
+  '<p><b>iPhone・iPad</b>：ホーム画面のアプリで「QRを読み取って設定」を押し、このQRを映してください。</p>',
+  '<div id="qr" style="text-align:center"></div>',
+  '<p style="color:#9B2C1C;font-size:12px">このリンクとQRには合言葉が入っています。スクショ・共有はしないでください。</p>',
+  '<script src="<?= qrLib ?>"></script>',
+  '<script>',
+  '  try { var q = qrcode(0, "M"); q.addData(<?!= JSON.stringify(link) ?>); q.make();',
+  '    document.getElementById("qr").innerHTML = q.createImgTag(5, 8); } catch (e) {',
+  '    document.getElementById("qr").textContent = "QRを表示できませんでした（ボタンからの設定は使えます）"; }',
+  '</script>',
+  '<? } ?>',
+  '</div>'
+].join('\n');
+
 function doGet() {
+  // ブラウザで …/exec を開いたときに、公開URLを覚えておく（メニューの設定用）
+  try { conf_() && execUrl_(SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONF_SHEET)); } catch (e) { /* 無視 */ }
   return out_({ ok: true, app: 'copipe' });
 }
 
@@ -41,7 +112,7 @@ function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var conf = ss.getSheetByName(CONF_SHEET);
   var pass = conf ? String(conf.getRange('B1').getValue()).trim() : '';
-  if (!pass) return out_({ ok: false, error: 'no_pass' });
+  if (!pass) return out_({ ok: false, error: 'no_pass' });  // setup 未実行
   if (String(req.key || '') !== pass) return out_({ ok: false, error: 'bad_key' });
 
   var lock = LockService.getScriptLock();

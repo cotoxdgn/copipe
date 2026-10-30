@@ -11,8 +11,8 @@
   var state = { cfg: null, items: [], busy: false, lastFetch: 0 };
 
   var ERRORS = {
-    bad_key: '合言葉が違います',
-    no_pass: 'スプシの「設定」シートB1に合言葉を入れてください',
+    bad_key: '接続の鍵が合いません。スプシのメニュー「コピペ」から設定し直してください',
+    no_pass: 'スプシの準備が終わっていません（関数「setup」を実行してください）',
     no_sheet: 'スプシの準備ができていません（setupを実行してください）',
     empty: '空の内容は保存できません',
     too_long: '長すぎます（5万字まで）',
@@ -139,14 +139,11 @@
     setUpdated();
   }
 
-  // 合言葉が違うときは、設定画面の入力欄まで案内する
+  // 鍵が合わなくなったときは、設定し直しを案内する
   function fail(e) {
     if (e && e.message === 'bad_key' && state.cfg && !$('main').hidden) {
       showSetup(false);
-      $('manualBox').open = true;
-      setStatus('合言葉が違います。スプシの「設定」シートB1と同じ合言葉を「合言葉」欄に入れて「保存」を押してください', true);
-      $('cfgKey').focus();
-      $('cfgKey').select();
+      setStatus('スプシにつながらなくなりました。スプシのメニュー「コピペ」→「この端末を設定」のボタンからもう一度設定してください', true);
       return;
     }
     toast(errText(e), true);
@@ -270,18 +267,22 @@
     var c = preset || state.cfg || {};
     $('cfgUrl').value = c.url || '';
     $('cfgKey').value = c.key || '';
+    $('cfgLink').value = '';
     $('cfgDevice').value = (state.cfg && state.cfg.device) || detectDevice();
     $('setupStatus').hidden = true;
     // カメラが使えない環境では最初から手入力を開く
     var canScan = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     // 設定済みの端末は「他の端末を追加」が主役。読み取りは未設定のときだけ
-    $('qrStart').hidden = !canScan || !!state.cfg;
-    $('manualBox').open = !canScan || !!preset;
-    $('manualSummary').textContent = state.cfg ? '接続先を確認・変更する' : '手で入力する';
+    var mobile = isIOS() || /Android/.test(navigator.userAgent);
+    $('qrStart').hidden = !canScan || !mobile || !!state.cfg;
+    $('manualBox').open = false;
+    $('manualSummary').textContent = state.cfg ? '接続先を変更する（設定リンクを貼り付け）' : '設定リンクを貼り付けて設定';
     $('saveCfgBtn').textContent = state.cfg ? '保存' : '保存してはじめる';
     $('setupLead').textContent = state.cfg
       ? 'iPhone・iPadを追加するときは、下の「QRを表示」を押してください。'
-      : '設定済みの端末（Windowsなど）の 歯車 →「他の端末を追加」に出るQRを読み取るだけで設定できます。';
+      : (isIOS()
+        ? 'スプシのメニュー「コピペ」→「この端末を設定」か、設定済みの端末の 歯車 →「他の端末を追加」に出るQRを読み取ってください。'
+        : 'スプシのメニュー「コピペ」→「この端末を設定」を開き、「アプリを開いて設定する」を押すと設定が終わります。');
     // 設定済みの端末だけ「他の端末を追加」を出す
     $('shareBox').hidden = !state.cfg;
     hideQr();
@@ -398,11 +399,17 @@
     $('deviceChip').textContent = state.cfg.device;
   }
   function readForm() {
-    return {
+    var c = {
       url: $('cfgUrl').value.trim(),
       key: $('cfgKey').value.trim(),
       device: $('cfgDevice').value.trim() || detectDevice()
     };
+    var raw = $('cfgLink').value.trim();
+    if (raw) {
+      var fromLink = parseSetup(raw);
+      if (fromLink) { c.url = fromLink.url; c.key = fromLink.key; } else { c.badLink = true; }
+    }
+    return c;
   }
   function setStatus(msg, isError) {
     var s = $('setupStatus');
@@ -411,17 +418,22 @@
     s.hidden = false;
   }
   function validCfg(c) {
-    if (!c.url && !c.key) {
+    if (c.badLink) {
       $('manualBox').open = true;
-      setStatus('「QRを読み取って設定」を押すか、「手で入力する」からURLと合言葉を入れてください', true);
+      setStatus('設定リンクではないようです。スプシのメニュー「コピペ」→「この端末を設定」のリンクを貼り付けてください', true);
+      return false;
+    }
+    if (!c.url || !c.key) {
+      setStatus(isIOS()
+        ? '「QRを読み取って設定」を押して、スプシのメニューか設定済みの端末に出るQRを映してください'
+        : 'スプシのメニュー「コピペ」→「この端末を設定」を開き、「アプリを開いて設定する」を押してください', true);
       return false;
     }
     if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(c.url) && !/^http:\/\/localhost(:\d+)?\//.test(c.url)) {
       $('manualBox').open = true;
-      setStatus('URLは https://script.google.com/… で始まるものを入れてください', true);
+      setStatus('設定リンクの中身が正しくありません。スプシのメニューからもう一度リンクを開いてください', true);
       return false;
     }
-    if (!c.key) { $('manualBox').open = true; setStatus('合言葉を入れてください', true); return false; }
     return true;
   }
   function testCfg(c) {
@@ -499,7 +511,11 @@
     if (fromLink) {
       try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 無視 */ }
       showSetup(!state.cfg, fromLink);
-      setStatus('QRの内容を読み込みました。「保存してはじめる」を押してください', false);
+      if (!state.cfg) {
+        finishSetup();  // 未設定ならそのまま設定を終える
+      } else {
+        setStatus('新しい接続先を読み込みました。切り替えるなら「保存」を押してください', false);
+      }
     } else if (!state.cfg) {
       showSetup(true);
     } else {
