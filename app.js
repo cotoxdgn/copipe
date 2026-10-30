@@ -139,6 +139,19 @@
     setUpdated();
   }
 
+  // 合言葉が違うときは、設定画面の入力欄まで案内する
+  function fail(e) {
+    if (e && e.message === 'bad_key' && state.cfg && !$('main').hidden) {
+      showSetup(false);
+      $('manualBox').open = true;
+      setStatus('合言葉が違います。スプシの「設定」シートB1と同じ合言葉を「合言葉」欄に入れて「保存」を押してください', true);
+      $('cfgKey').focus();
+      $('cfgKey').select();
+      return;
+    }
+    toast(errText(e), true);
+  }
+
   // ---------- 操作 ----------
   function refresh(quiet) {
     if (!state.cfg) return Promise.resolve();
@@ -148,7 +161,7 @@
     return api('list').then(function (d) {
       applyItems(d.items);
     }).catch(function (e) {
-      if (!quiet || e.message === 'bad_key') toast(errText(e), true);
+      if (!quiet || e.message === 'bad_key') fail(e);
     }).finally(function () { btn.classList.remove('spinning'); });
   }
 
@@ -162,7 +175,7 @@
       toast('保存しました');
       return true;
     }).catch(function (e) {
-      toast(errText(e), true);
+      fail(e);
       return false;
     }).finally(function () {
       state.busy = false;
@@ -236,7 +249,7 @@
   function togglePin(it) {
     api('pin', { id: it.id, pinned: !it.pinned }).then(function (d) {
       applyItems(d.items);
-    }).catch(function (e) { toast(errText(e), true); });
+    }).catch(function (e) { fail(e); });
   }
 
   function deleteItem(it) {
@@ -245,7 +258,7 @@
     api('delete', { id: it.id }).then(function (d) {
       applyItems(d.items);
       toast('削除しました');
-    }).catch(function (e) { toast(errText(e), true); });
+    }).catch(function (e) { fail(e); });
   }
 
   // ---------- 設定 ----------
