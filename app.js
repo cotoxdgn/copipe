@@ -249,16 +249,135 @@
   }
 
   // ---------- 設定 ----------
-  function showSetup(isFirst) {
+  function showSetup(isFirst, preset) {
     $('main').hidden = true;
     $('setup').hidden = false;
     $('setupTitle').textContent = isFirst ? 'はじめての設定' : '設定';
     $('cancelSetupBtn').hidden = isFirst;
-    var c = state.cfg || {};
+    var c = preset || state.cfg || {};
     $('cfgUrl').value = c.url || '';
     $('cfgKey').value = c.key || '';
-    $('cfgDevice').value = c.device || detectDevice();
+    $('cfgDevice').value = (state.cfg && state.cfg.device) || detectDevice();
     $('setupStatus').hidden = true;
+    // カメラが使えない環境では最初から手入力を開く
+    var canScan = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    // 設定済みの端末は「他の端末を追加」が主役。読み取りは未設定のときだけ
+    $('qrStart').hidden = !canScan || !!state.cfg;
+    $('manualBox').open = !canScan || !!preset;
+    $('manualSummary').textContent = state.cfg ? '接続先を確認・変更する' : '手で入力する';
+    $('saveCfgBtn').textContent = state.cfg ? '保存' : '保存してはじめる';
+    $('setupLead').textContent = state.cfg
+      ? 'iPhone・iPadを追加するときは、下の「QRを表示」を押してください。'
+      : '設定済みの端末（Windowsなど）の 歯車 →「他の端末を追加」に出るQRを読み取るだけで設定できます。';
+    // 設定済みの端末だけ「他の端末を追加」を出す
+    $('shareBox').hidden = !state.cfg;
+    hideQr();
+  }
+
+  // ---------- QR（他の端末を追加） ----------
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('load')); };
+      document.head.appendChild(s);
+    });
+  }
+  function b64urlEncode(str) {
+    return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64urlDecode(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return decodeURIComponent(escape(atob(s)));
+  }
+  function setupLink(c) {
+    var base = location.href.split('#')[0].split('?')[0];
+    return base + '#setup=' + b64urlEncode(JSON.stringify({ u: c.url, k: c.key }));
+  }
+  // QRの中身（このアプリのURL＋#setup=…）から設定を取り出す
+  function parseSetup(text) {
+    var m = /#setup=([A-Za-z0-9_-]+)/.exec(text || '');
+    if (!m) return null;
+    try {
+      var o = JSON.parse(b64urlDecode(m[1]));
+      if (o && typeof o.u === 'string' && typeof o.k === 'string') return { url: o.u, key: o.k };
+    } catch (e) { /* 読めないQR */ }
+    return null;
+  }
+  function showQr() {
+    if (!state.cfg) return;
+    var draw = function () {
+      var qr = qrcode(0, 'M');
+      qr.addData(setupLink(state.cfg));
+      qr.make();
+      $('qrImg').src = qr.createDataURL(8, 16);
+      $('qrWrap').hidden = false;
+      $('showQrBtn').hidden = true;
+    };
+    if (window.qrcode) { draw(); return; }
+    loadScript('lib/qrcode.js').then(draw, function () { toast('QRを表示できませんでした（通信を確認）', true); });
+  }
+  function hideQr() {
+    $('qrWrap').hidden = true;
+    $('qrImg').removeAttribute('src');
+    $('showQrBtn').hidden = false;
+  }
+
+  // ---------- QR読み取り ----------
+  var scan = { stream: null, raf: 0, canvas: null };
+  function startScan() {
+    var go = function () {
+      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function (stream) {
+        scan.stream = stream;
+        var v = $('scanVideo');
+        v.srcObject = stream;
+        $('scanMsg').textContent = 'QRを枠の中に映してください';
+        $('scanner').hidden = false;
+        return v.play().catch(function () {}).then(function () { scanLoop(); });
+      });
+    };
+    var ready = window.jsQR ? Promise.resolve() : loadScript('lib/jsQR.js');
+    ready.then(go).catch(function (e) {
+      stopScan();
+      if (e && e.message === 'load') { toast('読み取りの準備ができませんでした（通信を確認）', true); return; }
+      $('manualBox').open = true;
+      setStatus('カメラを使えませんでした。設定アプリでカメラを許可するか、「手で入力する」から入れてください', true);
+    });
+  }
+  function scanLoop() {
+    var v = $('scanVideo');
+    if (!scan.stream) return;
+    if (v.readyState >= 2 && v.videoWidth) {
+      var w = v.videoWidth, h = v.videoHeight;
+      var scale = Math.min(1, 800 / Math.max(w, h));
+      var cw = Math.round(w * scale), ch = Math.round(h * scale);
+      var cv = scan.canvas || (scan.canvas = document.createElement('canvas'));
+      cv.width = cw; cv.height = ch;
+      var ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(v, 0, 0, cw, ch);
+      var img = ctx.getImageData(0, 0, cw, ch);
+      var hit = window.jsQR(img.data, cw, ch, { inversionAttempts: 'dontInvert' });
+      if (hit && hit.data) {
+        var c = parseSetup(hit.data);
+        if (c) { stopScan(); onScanned(c); return; }
+        $('scanMsg').textContent = 'このアプリの設定用QRではありません';
+      }
+    }
+    scan.raf = requestAnimationFrame(scanLoop);
+  }
+  function stopScan() {
+    cancelAnimationFrame(scan.raf);
+    if (scan.stream) scan.stream.getTracks().forEach(function (t) { t.stop(); });
+    scan.stream = null;
+    $('scanVideo').srcObject = null;
+    $('scanner').hidden = true;
+  }
+  function onScanned(c) {
+    $('cfgUrl').value = c.url;
+    $('cfgKey').value = c.key;
+    finishSetup();
   }
   function showMain() {
     $('setup').hidden = true;
@@ -279,11 +398,17 @@
     s.hidden = false;
   }
   function validCfg(c) {
+    if (!c.url && !c.key) {
+      $('manualBox').open = true;
+      setStatus('「QRを読み取って設定」を押すか、「手で入力する」からURLと合言葉を入れてください', true);
+      return false;
+    }
     if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(c.url) && !/^http:\/\/localhost(:\d+)?\//.test(c.url)) {
+      $('manualBox').open = true;
       setStatus('URLは https://script.google.com/… で始まるものを入れてください', true);
       return false;
     }
-    if (!c.key) { setStatus('合言葉を入れてください', true); return false; }
+    if (!c.key) { $('manualBox').open = true; setStatus('合言葉を入れてください', true); return false; }
     return true;
   }
   function testCfg(c) {
@@ -294,6 +419,19 @@
     }, function (e) {
       setStatus(errText(e), true);
       return null;
+    });
+  }
+
+  function finishSetup() {
+    var c = readForm();
+    if (!validCfg(c)) return;
+    testCfg(c).then(function (d) {
+      if (!d) { $('manualBox').open = true; return; }
+      state.cfg = c;
+      store(CFG_KEY, c);
+      showMain();
+      applyItems(d.items);
+      toast('設定しました');
     });
   }
 
@@ -329,16 +467,12 @@
     });
     $('setupForm').addEventListener('submit', function (ev) {
       ev.preventDefault();
-      var c = readForm();
-      if (!validCfg(c)) return;
-      testCfg(c).then(function (d) {
-        if (!d) return;
-        state.cfg = c;
-        store(CFG_KEY, c);
-        showMain();
-        applyItems(d.items);
-      });
+      finishSetup();
     });
+    $('scanBtn').addEventListener('click', startScan);
+    $('scanCancel').addEventListener('click', stopScan);
+    $('showQrBtn').addEventListener('click', showQr);
+    $('hideQrBtn').addEventListener('click', hideQr);
 
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && state.cfg && !$('main').hidden && Date.now() - state.lastFetch > 3000) refresh(true);
@@ -346,7 +480,14 @@
     window.addEventListener('online', function () { if (state.cfg) refresh(true); });
 
     state.cfg = load(CFG_KEY);
-    if (!state.cfg || !state.cfg.url || !state.cfg.key) {
+    if (state.cfg && (!state.cfg.url || !state.cfg.key)) state.cfg = null;
+    // スマホの標準カメラでQRを読んでこのページが開いた場合
+    var fromLink = parseSetup(location.hash);
+    if (fromLink) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 無視 */ }
+      showSetup(!state.cfg, fromLink);
+      setStatus('QRの内容を読み込みました。「保存してはじめる」を押してください', false);
+    } else if (!state.cfg) {
       showSetup(true);
     } else {
       showMain();

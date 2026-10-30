@@ -61,25 +61,54 @@
   <form class="setup" id="setupForm">
     <div>
       <h1 id="setupTitle">はじめての設定</h1>
-      <p class="lead">端末ごとに最初の1回だけ入力します。2台目以降も同じURLと合言葉を入れてください。</p>
+      <p class="lead" id="setupLead">設定済みの端末（Windowsなど）の 歯車 →「他の端末を追加」に出るQRを読み取るだけで設定できます。</p>
     </div>
+
+    <div class="card share-box" id="shareBox" hidden>
+      <div>
+        <h2 class="f-label share-title">他の端末を追加</h2>
+        <p class="f-help">iPhone・iPadのアプリで「QRを読み取って設定」を押し、このQRを映してください。</p>
+      </div>
+      <button type="button" class="outline-btn" id="showQrBtn">QRを表示</button>
+      <div class="qr-wrap" id="qrWrap" hidden>
+        <img id="qrImg" alt="設定用QRコード" width="240" height="240">
+        <p class="warn">このQRには合言葉が入っています。スクショ・共有はしないでください。</p>
+        <button type="button" class="text-btn" id="hideQrBtn">QRを隠す</button>
+      </div>
+    </div>
+
+    <div class="card qr-start" id="qrStart">
+      <button type="button" class="solid-btn big qr-btn" id="scanBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+        QRを読み取って設定
+      </button>
+      <p class="f-help">初回だけカメラの使用許可を聞かれます</p>
+    </div>
+
+    <details class="card manual-box" id="manualBox">
+      <summary id="manualSummary">手で入力する</summary>
+      <div class="fields">
+        <label>
+          <span class="f-label">スプシの接続URL</span>
+          <input type="url" id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <span class="f-help">1台目は、スプシの準備で「デプロイ」したときに出た …/exec で終わるURL</span>
+        </label>
+        <label>
+          <span class="f-label">合言葉</span>
+          <input type="password" id="cfgKey" autocomplete="off">
+          <span class="f-help">スプシの「設定」シートB1に入れた合言葉</span>
+        </label>
+      </div>
+    </details>
+
     <div class="card fields">
       <label>
-        <span class="f-label">1. スプレッドシートの接続URL</span>
-        <input type="url" id="cfgUrl" required placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false">
-        <span class="f-help">スプシで「ウェブアプリとして公開」したときに出るURLです</span>
-      </label>
-      <label>
-        <span class="f-label">2. 合言葉</span>
-        <input type="password" id="cfgKey" required autocomplete="off">
-        <span class="f-help">スプシの「設定」シートB1に入れた合言葉と同じもの</span>
-      </label>
-      <label>
-        <span class="f-label">3. この端末の名前</span>
+        <span class="f-label">この端末の名前</span>
         <input type="text" id="cfgDevice" required maxlength="30">
         <span class="f-help">自動で入ります。履歴の「どこから保存したか」に表示</span>
       </label>
     </div>
+
     <div class="status" id="setupStatus" hidden></div>
     <div class="setup-actions">
       <button type="button" class="outline-btn big" id="testBtn">接続テスト</button>
@@ -88,6 +117,14 @@
       <p class="hint center">設定はあとから右上の歯車で変更できます</p>
     </div>
   </form>
+</div>
+
+<!-- QR読み取り -->
+<div class="scanner" id="scanner" hidden>
+  <video id="scanVideo" playsinline muted autoplay></video>
+  <div class="scan-frame" aria-hidden="true"></div>
+  <p class="scan-msg" id="scanMsg">QRを枠の中に映してください</p>
+  <button type="button" class="scan-cancel" id="scanCancel">やめる</button>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -6,3 +6,8 @@ iPhone・iPad・Windowsの間でテキストやURLを受け渡すWebアプリ（
 - アプリ：https://cotoxdgn.github.io/copipe/
 - 設定手順：[SETUP.md](SETUP.md)
 - スプレッドシート側のプログラム：[gas/Code.gs](gas/Code.gs)
+
+## 同梱ライブラリ
+
+- `lib/qrcode.js` … QRコード作成（qrcode-generator / Kazuhiko Arase / MIT License）
+- `lib/jsQR.js` … QRコード読み取り（jsQR / Cosmo Wolfe / Apache License 2.0、`lib/jsQR-LICENSE.txt`）
