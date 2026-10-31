@@ -1,5 +1,5 @@
 /* 端末間コピペ：オフラインでも画面を開けるようにするための仕組み */
-var CACHE = 'copipe-v5';
+var CACHE = 'copipe-v6';
 var SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'lib/qrcode.js', 'lib/jsQR.js'];
 
 self.addEventListener('install', function (e) {

@@ -460,6 +460,11 @@
     });
   }
 
+  function applyLink(c) {
+    showSetup(!state.cfg, c);
+    finishSetup();
+  }
+
   // ---------- 起動 ----------
   function init() {
     $('pasteHint').textContent = isIOS()
@@ -503,6 +508,13 @@
       if (document.visibilityState === 'visible' && state.cfg && !$('main').hidden && Date.now() - state.lastFetch > 3000) refresh(true);
     });
     window.addEventListener('online', function () { if (state.cfg) refresh(true); });
+    // アプリを開いたまま設定リンクを開いた場合
+    window.addEventListener('hashchange', function () {
+      var c = parseSetup(location.hash);
+      if (!c) return;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 無視 */ }
+      applyLink(c);
+    });
 
     state.cfg = load(CFG_KEY);
     if (state.cfg && (!state.cfg.url || !state.cfg.key)) state.cfg = null;
@@ -510,12 +522,8 @@
     var fromLink = parseSetup(location.hash);
     if (fromLink) {
       try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* 無視 */ }
-      showSetup(!state.cfg, fromLink);
-      if (!state.cfg) {
-        finishSetup();  // 未設定ならそのまま設定を終える
-      } else {
-        setStatus('新しい接続先を読み込みました。切り替えるなら「保存」を押してください', false);
-      }
+      // 自分のスプシのメニューから開いたリンクなので、確認なしで設定を終える
+      applyLink(fromLink);
     } else if (!state.cfg) {
       showSetup(true);
     } else {
